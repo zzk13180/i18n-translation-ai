@@ -1,4 +1,5 @@
 import { defineConfig, loadEnv } from 'vite'
+import vue from '@vitejs/plugin-vue'
 import type { HttpProxy } from 'vite'
 import type * as http from 'node:http'
 
@@ -21,6 +22,7 @@ const proxy = {
 }
 
 export default defineConfig({
+  plugins: [vue()],
   server: {
     proxy,
   },

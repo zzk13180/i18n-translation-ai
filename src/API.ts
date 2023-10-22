@@ -1,7 +1,7 @@
 import type OpenAI from 'openai'
 
 export class API {
-  readonly BASE_URL = '/v1/'
+  readonly BASE_URL = '/v1/' // https://api.openai.com/v1/
   readonly METHOD = 'POST'
   readonly CACHE = 'no-store'
   readonly CREDENTIALS = 'include'
