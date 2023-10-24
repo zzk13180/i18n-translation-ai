@@ -1,57 +1,61 @@
 <template>
   <div class="container">
-    <button @click="start">测试</button>
-    <p>{{ item }}</p>
+    <button type="button" @click="start">Send 🌟</button>
+    <pre v-for="item in views" :key="item" class="item">{{ item }}</pre>
   </div>
 </template>
 
 <script lang="ts" setup>
-  import { ref } from 'vue'
+  import { reactive } from 'vue'
   import { API } from './API'
-  import type OpenAI from 'openai'
+  import { emojis } from './data'
+  import { Prompt } from './prompt'
+  import type { Emoji } from './data'
 
-  const systemPrompt =
-    'As a multilingual translation assistant, Your task is to complete the translation tasks of the application I18n. Please provide accurate and fluent translations to ensure that the original text is transformed into an equivalent expression appropriate to the target language and culture. You can use appropriate terminology and grammar to ensure the accuracy and professionalism of the translation.Please note that you should be able to translate multiple languages and provide flexible and creative translations as needed. Your translation should accurately convey the meaning of the original text and meet the requirements of the target language and culture.'
+  const api = new API()
+  const prompt = new Prompt()
+  const views = reactive<string[]>([])
 
-  const targetLanguage = 'english'
-
-  const userPrompt = (text: string) =>
-    `Translate the following text into ${targetLanguage},\n\n${text}\n\n\nTranslated into ${targetLanguage}:`
-
-  const text = 'ありがとうございます。' // Text to be translated
-
-  const params: OpenAI.Chat.ChatCompletionCreateParams = {
-    model: 'gpt-3.5-turbo',
-    messages: [
-      {
-        role: 'system',
-        content: systemPrompt,
-      },
-      {
-        role: 'user',
-        content: userPrompt(text),
-      },
-    ],
-    temperature: 0.5,
-    max_tokens: 1024,
+  const chunkArray = (arr: Emoji[], chunkSize = 399): Emoji[][] => {
+    const result = []
+    for (let i = 0; i < arr.length; i += chunkSize) {
+      result.push(arr.slice(i, i + chunkSize))
+    }
+    return result
   }
 
-  const item = ref('')
-  const api = new API()
+  const start = () => {
+    const twoDimensionalArray = chunkArray(emojis)
+    for (const [index, arr] of twoDimensionalArray.entries()) {
+      views[index] = ''
+      emojiArrayLoop(arr, index)
+    }
+  }
 
-  const start = async () => {
+  async function emojiArrayLoop(arr: Emoji[], index: number) {
+    for (const item of arr) {
+      const text = JSON.stringify(item)
+      await getResponseItem(text, index)
+      console.log(views.join()) // log the result of each item Prevent data loss
+    }
+  }
+
+  async function getResponseItem(text: string, index: number) {
+    const params = prompt.getParams(text)
     const { body } = await api.chat(params)
     if (typeof body?.getReader === 'function') {
       for await (const completions of API.readStream(body)) {
         completions.forEach(({ choices }) => {
-          const { delta } = choices[0]
-          if (delta.content) {
-            item.value += delta.content
+          try {
+            const { delta } = choices[0]
+            if (delta?.content) {
+              views[index] += delta.content
+            }
+          } catch (error) {
+            console.error(error)
           }
         })
       }
-    } else {
-      item.value = body ? JSON.stringify(body) : 'empty'
     }
   }
 </script>
@@ -62,13 +66,32 @@
     color: #2c3e50;
     background: #fff;
   }
+
   .container {
     max-width: 1280px;
     margin: 0 auto;
     padding: 2rem;
   }
-  .container p {
+
+  .container .item {
     font-size: 22px;
     display: inline-flex;
+  }
+
+  button {
+    border-radius: 8px;
+    color: hsla(160, 100%, 37%, 1);
+    border: 1px solid transparent;
+    padding: 0.6em 1.2em;
+    font-size: 1em;
+    font-weight: 500;
+    font-family: inherit;
+    background-color: #f9f9f9;
+    cursor: pointer;
+    transition: border-color 0.25s;
+  }
+
+  button:hover {
+    border-color: #646cff;
   }
 </style>
