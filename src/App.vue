@@ -16,7 +16,7 @@
   const prompt = new Prompt()
   const views = reactive<string[]>([])
 
-  const chunkArray = (arr: Emoji[], chunkSize = 399): Emoji[][] => {
+  const chunkArray = (arr: Emoji[], chunkSize = 10): Emoji[][] => {
     const result = []
     for (let i = 0; i < arr.length; i += chunkSize) {
       result.push(arr.slice(i, i + chunkSize))
@@ -24,38 +24,58 @@
     return result
   }
 
-  const start = () => {
-    const twoDimensionalArray = chunkArray(emojis)
-    for (const [index, arr] of twoDimensionalArray.entries()) {
-      views[index] = ''
-      emojiArrayLoop(arr, index)
-    }
+  const start = async () => {
+    views.length = 0
+    const batches = chunkArray(emojis, 10)
+    batches.forEach(() => views.push(''))
+
+    const tasks = batches.map((batch, index) => async () => {
+      await processBatch(batch, index)
+    })
+
+    await runWithConcurrency(tasks, 5)
   }
 
-  async function emojiArrayLoop(arr: Emoji[], index: number) {
-    for (const item of arr) {
-      const text = JSON.stringify(item)
-      await getResponseItem(text, index)
-      console.log(views.join()) // log the result of each item Prevent data loss
+  async function runWithConcurrency(tasks: (() => Promise<void>)[], limit: number) {
+    const executing = new Set<Promise<void>>()
+    for (const task of tasks) {
+      const p = task().then(() => {
+        executing.delete(p)
+      })
+      executing.add(p)
+      if (executing.size >= limit) {
+        await Promise.race(executing)
+      }
     }
+    await Promise.all(executing)
+  }
+
+  async function processBatch(batch: Emoji[], index: number) {
+    const text = JSON.stringify(batch)
+    await getResponseItem(text, index)
   }
 
   async function getResponseItem(text: string, index: number) {
-    const params = prompt.getParams(text)
-    const { body } = await api.chat(params)
-    if (typeof body?.getReader === 'function') {
-      for await (const completions of API.readStream(body)) {
-        completions.forEach(({ choices }) => {
-          try {
-            const { delta } = choices[0]
-            if (delta?.content) {
-              views[index] += delta.content
+    try {
+      const params = prompt.getParams(text)
+      const { body } = await api.chat(params)
+      if (typeof body?.getReader === 'function') {
+        for await (const completions of API.readStream(body)) {
+          completions.forEach(({ choices }) => {
+            try {
+              const { delta } = choices[0]
+              if (delta?.content) {
+                views[index] += delta.content
+              }
+            } catch (error) {
+              console.error(error)
             }
-          } catch (error) {
-            console.error(error)
-          }
-        })
+          })
+        }
       }
+    } catch (error) {
+      console.error(error)
+      views[index] += `\nError: ${error}`
     }
   }
 </script>
@@ -80,7 +100,7 @@
 
   button {
     border-radius: 8px;
-    color: hsla(160, 100%, 37%, 1);
+    color: hsl(160deg 100% 37% / 100%);
     border: 1px solid transparent;
     padding: 0.6em 1.2em;
     font-size: 1em;
